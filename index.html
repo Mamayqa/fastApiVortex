@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+<button id="btn1">получить</button>
+<button id="btn1_2">получить admin data</button>
+<button id="btn2">создать</button>
+<button id="btn3">редактировать</button>
+<button id="btn4">наряд</button>
+<button id="btn4_1">наряд получить</button>
+<button id="btn5">наряд delete</button>
+<button id="btn6_1">пользователь</button>
+<button id="btn6_2">пользовательское поле</button>
+<button id="btn6_3">трекер</button>
+<button id="btn6_4">роли</button>
+<button id="btn6_5">проект</button>
+<button id="btn6_6">наряды</button>
+<button id="btn12">django</button>
+<div id="tab"></div>
+
+<input type="file" id="file-input-temp" multiple hidden/>
+<button id="add_file">Добавить файл</button>
+<div id="overview"></div>
+<div id="dropzone">Drop files here</div>
+<script>
+    function getCookie(name) {
+        let cookieValue = null;
+
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+
+                // Does this cookie string begin with the name we want?
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+
+                    break;
+                }
+            }
+        }
+
+        return cookieValue;
+    }
+
+    // let logData = new FormData()
+    // // logData.append('data', JSON.stringify({
+    // //     login: 'test_admin',
+    // //     password: 'test_admin'
+    // // }))
+    // logData.append('data', 'test')
+    // // fetch('http://127.0.0.1:8000/api', {
+    // fetch('http://127.0.0.1:8000/api', {
+    //     method: 'POST',
+    //     body: 'logData',
+    // }).then((response) => response.json()).then((json) => {
+    //     sessionStorage.setItem('token', json.auth_token)
+    //     console.log(json)
+    //     sessionStorage.setItem('current_user_id', json.data.current_user_data.user_id)
+    // }).catch((error) => {
+    //     console.log(error)
+    // })
+    let formData = new FormData()
+    const dropZone = document.getElementById('dropzone')
+    let list_files = []
+    dropZone.addEventListener('dragover', event => event.preventDefault())
+    dropZone.addEventListener('drop', event => {
+        event.preventDefault()
+        Array.from(event.dataTransfer.files).forEach(file => {
+            file['id'] = list_files.length
+            list_files.push(file)
+        })
+        Array.from(event.dataTransfer.files).forEach(function (file, index) {
+            let p = document.createElement('p')
+            p.textContent = file['name'] + ' ' + Number(file['size'] / 1024).toFixed(2) + 'kB ' + file['type']
+            let button = document.createElement('button')
+            button.id = 'remove_' + index
+            button.textContent = 'удалить'
+            p.append(button)
+            document.getElementById('overview').append(p)
+        })
+        document.querySelector('[id^=remove_]').addEventListener('click', function (param) {
+            let temp = list_files.filter(function (file) {
+                return String(file['id']) !== String(param.currentTarget.id.split('_')[1])
+            })
+            list_files = []
+            temp.forEach(file => list_files.push(file))
+            this.parentElement.remove()
+        })
+    })
+    document.getElementById('file-input-temp').addEventListener('change', function () {
+        Array.from(this.files).forEach(file => {
+            file['id'] = list_files.length
+            list_files.push(file)
+        })
+        Array.from(this.files).forEach(function (file, index) {
+            let p = document.createElement('p')
+            p.textContent = file['name'] + ' ' + Number(file['size'] / 1024).toFixed(2) + 'kB ' + file['type']
+            let button = document.createElement('button')
+            button.id = 'remove_' + index
+            button.textContent = 'удалить'
+            p.append(button)
+            document.getElementById('overview').append(p)
+        })
+        document.querySelector('[id^=remove_]').addEventListener('click', function (param) {
+            let temp = list_files.filter(function (file) {
+                return String(file['id']) !== String(param.currentTarget.id.split('_')[1])
+            })
+            list_files = []
+            temp.forEach(file => list_files.push(file))
+            this.parentElement.remove()
+        })
+        this.files = null
+    })
+    document.getElementById('add_file').addEventListener('click', function (param) {
+        document.getElementById('file-input-temp').click()
+    })
+    document.getElementById('btn1').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            method: 'get_task_data',
+            task_on_page_count: 10,
+            current_page_number: 1,
+            current_user_id: 157,
+            auth_token: sessionStorage.getItem('token')
+        }
+        formData.append('data', JSON.stringify(data))
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn1_2').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            method: 'get_info_for_admin',
+            users_on_page_count: 10,
+            current_page_number: 1,
+            current_user_id: 157,
+            auth_token: sessionStorage.getItem('token')
+        }
+        formData.append('data', JSON.stringify(data))
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn2').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'create_task',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            project: 1,
+            tracker: 2,
+            title: 'test',
+            description: 'text',
+            status: 1,
+            responsible: 157,
+            parent: null,
+            priority: 1,
+            is_private: false,
+            icon: null,
+            members: [141, 12],
+            custom_fields: [
+                {
+                    id: 12,
+                    value: 19997
+                },
+                {
+                    id: 29,
+                    value: ['val1', 'val2']
+                }
+            ],
+        }
+        let temp = {
+            method: "get_task_data",
+            current_user_id: 157,
+            user_id: 157,
+            task_on_page_count: 10,
+            current_page_number: 1,
+            auth_token: "3062e3270717611e5135b40f5b671be8"
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        console.log(formData)
+
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn3').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'edit_task',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            task: 1,
+            tracker: 2,
+            members: [141, 4],
+            comment: 'test_comment',
+            relations: [],
+            relations_to_del: [11],
+            members_to_del: [],
+            files_to_del: [],
+            custom_fields: [
+                {
+                    id: 12,
+                    value: 19997
+                },
+                {
+                    id: 29,
+                    value: ['val1', 'val2']
+                }
+            ],
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn4').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'create_work',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            work_date: '2023-01-24',
+            task: 1,
+            worker_id: 8
+
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn4_1').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'get_work',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn5').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'delete_work',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            work_date: '2023-01-24',
+            task: 1,
+            worker_id: 8
+
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn6_1').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'edit_users',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            login: 'test_admin',
+            password: 'test_admin',
+            firstname: 'test',
+            lastname: 'admin',
+            groups: [134],
+            members: [
+                {
+                    project: 1,
+                    roles: [8, 18]
+                },
+                {
+                    project: 2,
+                    roles: [18]
+                }
+            ]
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn6_2').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'edit_custom_field',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            cf_name: 'test_cf',
+            possible_values: [],
+            default_value: null
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn6_3').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'edit_trackers',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            // tracker_name: 'test_tracker',
+            tracker: 31,
+            // cfs:[2,12]
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn6_4').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'edit_roles',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            role: 22,
+            // role_name: 'test_role2'
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn6_5').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'edit_projects',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            // project_name: 'test_project22',
+            project: 7
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn6_6').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            auth_token: sessionStorage.getItem('token'),
+            method: 'edit_workers',
+            current_user_id: sessionStorage.getItem('current_user_id'),
+            worker_name: 'test_worker2',
+            worker: 9,
+            user: 11,
+            work_manager: [157, 12, 13]
+        }
+        formData.append('data', JSON.stringify(data))
+
+        list_files.forEach(file => formData.append('file', file))
+        list_files = []
+        document.getElementById('overview').innerHTML = null
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+</script>
+</body>
+</html>

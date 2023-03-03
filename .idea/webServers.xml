@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="fa618406-a80f-49c5-973d-961953fdd7fb" name="vortex_server">
+        <fileTransfer accessType="SFTP" host="10.10.20.129" port="22" sshConfigId="b44aba64-3c7d-4f3e-a58a-da7ff0e8f1bc" sshConfig="server@10.10.20.129:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
