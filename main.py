@@ -1,6 +1,8 @@
 import json
 import traceback
 import pymysql
+import datetime
+
 from pymysql.constants import CLIENT
 from typing import Optional
 from fastapi import FastAPI, UploadFile, Form, Request
@@ -43,6 +45,62 @@ def get_connection_pymysql():
                                  cursorclass=pymysql.cursors.DictCursor,
                                  client_flag=CLIENT.MULTI_STATEMENTS)
     return connection
+
+
+def get_projects(**kwargs):
+    """
+    Получить список проектов
+    :param kwargs:
+    :return:
+    """
+    with get_connection_pymysql() as connection:
+        with connection.cursor() as cursor:
+            sql = f""" select projects.id, name from projects
+            {f'''join members m on projects.id = m.project_id
+            where user_id = {kwargs.get('user_id')}''' if kwargs.get('user_id') else ''}"""
+            cursor.execute(sql)
+    return cursor.fetchall()
+
+
+def get_statuses(**kwargs):
+    """
+    Получить список статусов
+    :param kwargs:
+    :return:
+    """
+    with get_connection_pymysql() as connection:
+        with connection.cursor() as cursor:
+            sql = f""" select id, name from issue_statuses"""
+            cursor.execute(sql)
+    return cursor.fetchall()
+
+
+def get_trackers(**kwargs):
+    """
+    Получить список трекеров
+    :param kwargs:
+    :return:
+    """
+    with get_connection_pymysql() as connection:
+        with connection.cursor() as cursor:
+            sql = f""" select trackers.id, name {', project_id' if kwargs.get('projects') else ''} from trackers
+            {(f'''join projects_trackers pt on trackers.id = pt.tracker_id
+            where project_id= ''' + ' or project_id = '.join([str(project['id']) for project in kwargs.get('projects')])) if kwargs.get('projects') else ''}"""
+            cursor.execute(sql)
+    return cursor.fetchall()
+
+
+def get_priority(**kwargs):
+    """
+    Получить список приоритетов
+    :param kwargs:
+    :return:
+    """
+    with get_connection_pymysql() as connection:
+        with connection.cursor() as cursor:
+            sql = f""" select id, name from enumerations where type = 'IssuePriority'"""
+            cursor.execute(sql)
+    return cursor.fetchall()
 
 
 def get_user(**kwargs):
@@ -258,27 +316,6 @@ def get_custom_fields(**kwargs):
             data = cursor.fetchall()
             city = []
             street = {}
-            for idx, value_c in enumerate(
-                    [val.strip() for val in [x for x in data if x['id'] == 1][0]['possible_values'].split('\n')]):
-                temp = []
-                if value_c != '':
-                    for value_s in [val.strip() for val in
-                                    [x for x in data if x['id'] == 8][0]['possible_values'].split('\n')]:
-                        if value_s.__contains__(value_c):
-                            temp.append({'id': value_s[2:], 'text': value_s[2:]})
-
-                    street[value_c[2:]] = temp
-                    city.append({'id': value_c[2:], 'text': value_c[2:]})
-            for value in [val for val in
-                          [x for x in data if x['id'] != 1 and x['id'] != 8 and x['possible_values'] is not None]]:
-                value['possible_values'] = [val.strip() for val in value['possible_values'].split('\n-')]
-            for item in data:
-                if item['id'] == 1:
-                    item['possible_values'] = city
-                elif item['id'] == 8:
-                    item['possible_values'] = street
-                else:
-                    continue
             for item in data:
                 if item['possible_values'] is not None:
                     item['is_select'] = True
@@ -288,7 +325,7 @@ def get_custom_fields(**kwargs):
 
 @app.post("/api")
 async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)):
-    print(file)
+    files = files if files else []
     print(data)
     request_data = json.loads(data)
     # data = ast.literal_eval(data.decode("utf-8"))

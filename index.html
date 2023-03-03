@@ -10,6 +10,7 @@
 <body>
 <button id="btn1">получить</button>
 <button id="btn1_2">получить admin data</button>
+<button id="btn1_3">получить create data</button>
 <button id="btn2">создать</button>
 <button id="btn3">редактировать</button>
 <button id="btn4">наряд</button>
@@ -149,6 +150,28 @@
         }
         let data = {
             method: 'get_info_for_admin',
+            users_on_page_count: 10,
+            current_page_number: 1,
+            current_user_id: 157,
+            auth_token: sessionStorage.getItem('token')
+        }
+        formData.append('data', JSON.stringify(data))
+        await fetch('http://127.0.0.1:8000/api', {
+            method: 'POST',
+            body: formData,
+        }).then((response) => response.json()).then((json) => {
+            console.log(json)
+            document.getElementById('tab').innerHTML = JSON.stringify(json)
+        }).catch((error) => {
+            console.log(error)
+        })
+    })
+    document.getElementById('btn1_3').addEventListener('click', async function () {
+        for (let key of formData.keys()) {
+            formData.delete(key)
+        }
+        let data = {
+            method: 'get_info_for_create',
             users_on_page_count: 10,
             current_page_number: 1,
             current_user_id: 157,
