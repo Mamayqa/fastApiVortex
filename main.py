@@ -2,13 +2,16 @@ import json
 import traceback
 import pymysql
 import datetime
+import hashlib
 
-from pymysql.constants import CLIENT
-from typing import Optional
-from fastapi import FastAPI, UploadFile, Form, Request
+from fastapi import FastAPI, UploadFile, Form, Request, HTTPException, status, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
+from pymysql.constants import CLIENT
+from typing import Optional
 
 app = FastAPI()
 
@@ -103,7 +106,7 @@ def get_priority(**kwargs):
     return cursor.fetchall()
 
 
-def get_user(**kwargs):
+def get_users(**kwargs):
     with get_connection_pymysql() as connection:
         with connection.cursor() as cursor:
             sql = f"""
@@ -111,6 +114,8 @@ def get_user(**kwargs):
                temp2.fullname,
                temp2.login,
                temp2.admin,
+               temp2.hashed_password,
+               temp2.salt,
                temp2.type,
                temp2.name,
                group_concat(u2.id, '/', u2.lastname) as groupname,
@@ -119,6 +124,8 @@ def get_user(**kwargs):
         from (select temp.id,
                      temp.login,
                      temp.admin,
+                     temp.hashed_password,
+                     temp.salt,
                      fullname,
                      temp.type,
                      group_concat(name) as name,
@@ -128,6 +135,8 @@ def get_user(**kwargs):
               from (select u.id,
                            u.login,
                            u.admin,
+                           u.hashed_password,
+                           u.salt,
                            concat(lastname, ' ', firstname)         as fullname,
                            type,
                            concat(project_id, '/', r.id, '/', name) as name,
@@ -326,16 +335,13 @@ def get_custom_fields(**kwargs):
 @app.post("/api")
 async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)):
     files = files if files else []
-    print(data)
     request_data = json.loads(data)
-    # data = ast.literal_eval(data.decode("utf-8"))
-    # print(type(data))
     response = {
         'error': False,
     }
     if True or request_data.get('auth_token') in auth_tokens:
         try:
-            current_user = get_user(user_id=request_data.get('current_user_id'))[0]
+            current_user = get_users(user_id=request_data.get('current_user_id'))[0]
             if request_data.get('method') == 'get_task_data':
                 if request_data.get('current_user_id') is None:
                     response['error'] = True
@@ -530,7 +536,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                     file.save(os.path.join(app.config['UPLOAD_FOLDER'] + path, filename))
                     size = os.path.getsize(os.path.join(app.config['UPLOAD_FOLDER'] + path + filename))
                     sql_attach += f'''insert into attachments (container_id, filename, disk_filename, filesize, content_type, author_id, created_on, description, disk_directory)
-                                                    values ((select id from issues order by id desc limit 1), '{file.filename}', '{filename}', {size}, '{file.content_type}', 
+                                                    values ((select id from issues order by id desc limit 1), '{file.filename}', '{filename}', {size}, '{file.content_type}',
                                                     {current_user['id']}, '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}', '', '{path[:-1]}');'''
                 sql_member = f"""insert into issue_members (watchable_id, user_id, performed)
                                 values ((select id from issues order by id desc limit 1), {current_user['id']}, null);""" if request_data.get(
@@ -540,7 +546,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                                 values ((select id from issues order by id desc limit 1), {member}, null);"""
                 sql_cfs = ''
                 for cf in request_data.get('custom_fields'):
-                    sql_cfs += f"""insert into custom_values (customized_id, custom_field_id, value) 
+                    sql_cfs += f"""insert into custom_values (customized_id, custom_field_id, value)
                                 values((select id from issues order by id desc limit 1), {cf['id']}, '{'/'.join(cf['value']) if type(cf['value']) is list else cf['value']}');"""
                 with get_connection_pymysql() as connection:
                     with connection.cursor() as cursor:
@@ -622,7 +628,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                     size = os.path.getsize(os.path.join(app.config['UPLOAD_FOLDER'] + path + filename))
                     sql_journal_details += f"insert into journal_details (journal_id, property, prop_key, old_value, value) values ((select id from journals order by id desc limit 1), 'attachment', (select id from attachments where disk_filename = '{filename}' and disk_directory = '{path[:-1]}'), null, '{file.filename}');"
                     sql_attach += f'''insert into attachments (container_id, filename, disk_filename, filesize, content_type, author_id, created_on, description, disk_directory)
-                                                                values ((select id from issues order by id desc limit 1), '{file.filename}', '{filename}', {size}, '{file.content_type}', 
+                                                                values ((select id from issues order by id desc limit 1), '{file.filename}', '{filename}', {size}, '{file.content_type}',
                                                                 {current_user['id']}, '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}', '', '{path[:-1]}');'''
                 sql_attach_del = ''
                 for attach in request_data.get('files_to_del'):
@@ -637,7 +643,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                                             insert into issue_relations (issue_from_id, issue_to_id) values ({request_data.get('task')}, {relation}); end if;"""
                     sql_journal_details += f"""if (select count(*) from issue_relations
                                             where issue_from_id = {request_data.get('task')} and issue_to_id = {relation}
-                                               or issue_from_id = {relation} and issue_to_id = {request_data.get('task')}) > 0 then 
+                                               or issue_from_id = {relation} and issue_to_id = {request_data.get('task')}) > 0 then
                                                insert into journal_details (journal_id, property, prop_key, old_value, value) values ((select id from journals order by id desc limit 1), 'relation', 'relates', null, {relation}); end if;"""
                     sql_journal_relations += f"""if (select count(*) from issue_relations
                                             where issue_from_id = {request_data.get('task')} and issue_to_id = {relation}
@@ -669,7 +675,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                 for member in request_data.get('members'):
                     sql_members += f"""insert into issue_members (watchable_id, user_id, performed)
                                 values ({request_data.get('task')}, {member}, null) on duplicate key update performed = values(performed);"""
-                sql_journal_details += f"""if (select count(*) from issue_members where watchable_id = {request_data.get('task')} and (user_id = {' or user_id = '.join(map(str, request_data.get('members')))} or user_id = {current_user['id']})) < 1 then insert into journal_details (journal_id, property, prop_key, old_value, value) 
+                sql_journal_details += f"""if (select count(*) from issue_members where watchable_id = {request_data.get('task')} and (user_id = {' or user_id = '.join(map(str, request_data.get('members')))} or user_id = {current_user['id']})) < 1 then insert into journal_details (journal_id, property, prop_key, old_value, value)
                             values ((select id from journals order by id desc limit 1), 'attr', 'issue_mb', (
                             select group_concat(user_id separator '/') from issue_members where watchable_id = {request_data.get('task')} group by watchable_id), '{'/'.join(map(str, request_data.get('members')))}'); end if;""" if request_data.get(
                     'members') else ''
@@ -677,17 +683,17 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                 cfs = []
                 for custom_field in request_data.get('custom_fields'):
                     cfs.append(custom_field['id'])
-                    sql_journal_details += f"""if {custom_field['id']} in (select custom_field_id from custom_fields_trackers where tracker_id = (select tracker_id from issues where id = {request_data.get('task')})) and 
-                            '{'/'.join(custom_field['value']) if type(custom_field['value']) is list else custom_field['value']}' != ifnull((select value from custom_values where customized_id = {request_data['task']} and custom_field_id = {custom_field['id']}),'None') then 
-                            insert into journal_details (journal_id, property, prop_key, old_value, value) 
+                    sql_journal_details += f"""if {custom_field['id']} in (select custom_field_id from custom_fields_trackers where tracker_id = (select tracker_id from issues where id = {request_data.get('task')})) and
+                            '{'/'.join(custom_field['value']) if type(custom_field['value']) is list else custom_field['value']}' != ifnull((select value from custom_values where customized_id = {request_data['task']} and custom_field_id = {custom_field['id']}),'None') then
+                            insert into journal_details (journal_id, property, prop_key, old_value, value)
                             values ((select id from journals order by id desc limit 1), 'cf', {custom_field['id']}, (select value from custom_values where customized_id = {request_data.get('task')} and custom_field_id = {custom_field['id']}), '{'/'.join(custom_field['value']) if type(custom_field['value']) is list else custom_field['value']}'); end if;"""
-                    sql_custom_fields += f"""insert into custom_values (customized_id, custom_field_id, value) 
+                    sql_custom_fields += f"""insert into custom_values (customized_id, custom_field_id, value)
                                 values ({request_data.get('task')}, {custom_field['id']}, '{'/'.join(custom_field['value']) if type(custom_field['value']) is list else custom_field['value']}') on duplicate key update value = values(value);"""
                 sql_custom_fields_del = f"delete from custom_values where customized_id = {request_data.get('task')} and custom_field_id !=" + ' and custom_field_id != '.join(
                     map(str, cfs))
                 with get_connection_pymysql() as connection:
                     with connection.cursor() as cursor:
-                        sql = f"""insert into journals (journalized_id, user_id, notes, created_on) 
+                        sql = f"""insert into journals (journalized_id, user_id, notes, created_on)
                                     values({request_data.get('task')}, {current_user['id']}, '{request_data.get('comment') if request_data.get('comment') else ''}', '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}');
                                     {f'''if (select subject from issues where id = {request_data.get('task')}) != '{request_data.get('title')}' then insert into journal_details (journal_id, property, prop_key, old_value, value) values ((select id from journals order by id desc limit 1), 'attr', 'subject', (select subject from issues where id = {request_data.get('task')}), '{request_data.get('title')}'); end if;''' if request_data.get('title') else ''}
                                     {f'''if (select tracker_id from issues where id = {request_data.get('task')}) != {request_data.get('tracker')} then insert into journal_details (journal_id, property, prop_key, old_value, value) values ((select id from journals order by id desc limit 1), 'attr', 'tracker_id', (select tracker_id from issues where id = {request_data.get('task')}), '{request_data.get('tracker')}'); end if;''' if request_data.get('tracker') else ''}
@@ -709,7 +715,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                                         where id = {request_data.get('task')};{sql_attach}{sql_relations}{sql_relations_to_del}
                                         {sql_journal_details}
                                         {sql_attach_del}{sql_members_del}{sql_members}{sql_custom_fields}{sql_custom_fields_del if request_data.get('custom_fields') else ''};
-                                        if (select count(*) as count from journal_details where journal_id = (select id from journals order by id desc limit 1)) < 1 and 
+                                        if (select count(*) as count from journal_details where journal_id = (select id from journals order by id desc limit 1)) < 1 and
                (select notes from journals where id = (select id from journals order by id desc limit 1)) in ('', null) then
         delete from journals where id = (select id from journals order by id desc limit 1);end if;{sql_journal_relations}{sql_journal_relations_to_del}
     """
@@ -824,7 +830,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
             elif request_data.get('method') == 'create_work':
                 with get_connection_pymysql() as connection:
                     with connection.cursor() as cursor:
-                        sql = f"""insert into naryads (date, issue_id, naryad_for) 
+                        sql = f"""insert into naryads (date, issue_id, naryad_for)
                                 values ('{request_data.get('work_date')}', {request_data.get('task')}, {request_data.get('worker_id')})"""
                         cursor.execute(sql)
                     connection.commit()
@@ -857,8 +863,8 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
             elif request_data.get('method') == 'delete_work':
                 with get_connection_pymysql() as connection:
                     with connection.cursor() as cursor:
-                        sql = f"""delete from naryads where date = '{request_data.get('work_date')}' 
-                                and issue_id = {request_data.get('task')} 
+                        sql = f"""delete from naryads where date = '{request_data.get('work_date')}'
+                                and issue_id = {request_data.get('task')}
                                 and naryad_for = {request_data.get('worker_id')}"""
                         cursor.execute(sql)
                     connection.commit()
@@ -893,12 +899,12 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                     with connection.cursor() as cursor:
                         sql = f"""insert into journals (journalized_id, user_id, notes, created_on)
                                 values ('{request_data.get('task')}', {current_user['id']}, '{request_data.get('comment')}', '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}');
-                                insert into journal_details (journal_id, property, prop_key, old_value, value) 
+                                insert into journal_details (journal_id, property, prop_key, old_value, value)
                                 values (
                                 (select id from journals where created_on = '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}' and journalized_id = {request_data.get('task')} and user_id = {current_user['id']}),
                                  'attr', 'assigned_to_id', (select assigned_to_id from issues where id = {request_data.get('task')}),
                                   '{request_data.get('user_id')}');
-                                insert into journal_details (journal_id, property, prop_key, old_value, value) 
+                                insert into journal_details (journal_id, property, prop_key, old_value, value)
                                 values (
                                 (select id from journals where created_on = '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}' and journalized_id = {request_data.get('task')} and user_id = {current_user['id']}),
                                  'attr', 'assigned_to_id', (select assigned_to_id from issues where id = {request_data.get('task')}),
@@ -906,9 +912,9 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                                 update issues set assigned_to_id = {request_data.get('user_id')} where id = {request_data.get('task')};
                                 update naryads set comment_id=(
                                 select id from journals where created_on = '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}' and journalized_id = {request_data.get('task')} and user_id = {current_user['id']}),
-                                 assigned = {request_data.get('user_id')} 
-                                 where issue_id = {request_data.get('task')} and 
-                                 date = '{request_data.get('date')}' and 
+                                 assigned = {request_data.get('user_id')}
+                                 where issue_id = {request_data.get('task')} and
+                                 date = '{request_data.get('date')}' and
                                  (naryad_for = {' or naryad_for = '.join(current_user['director_id'].split(','))});"""
                         cursor.execute(sql)
                     connection.commit()
@@ -973,7 +979,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
             elif request_data.get('method') == 'get_info_for_admin':
                 if current_user['admin'] == 1:
                     users, roles, cfs, projects, trackers, work_directors, work_managers = [], [], [], [], [], [], []
-                    for user in get_user():
+                    for user in get_users():
                         users.append({
                             'user_id': user['id'],
                             'user_name': {
@@ -1154,21 +1160,21 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                     sql = f"""insert into users ({'id, ' if request_data.get('id') is not None else ''} login, hashed_password, firstname, lastname, admin, status, last_login_on, created_on, updated_on, type, mail_notification, salt, must_change_passwd, passwd_changed_on, specific_id)
                         values ({str(request_data.get('id')) + ',' if request_data.get('id') is not None else ''}
                                 '{request_data.get('login') if request_data.get('login') is not None else ''}',
-                                '{hashed_password if request_data.get('password') is not None else ''}', 
-                                '{request_data.get('firstname') if request_data.get('firstname') is not None else ''}', 
-                                '{request_data.get('lastname')}', 
-                                {'0' if request_data.get('admin') is None else '1'}, 
-                                {request_data.get('status') if request_data.get('status') is not None else 1}, null, 
-                                '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}', 
-                                '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}', 
-                                '{'Group' if request_data.get('type') else 'User'}', 
-                                '{request_data.get('mail_notification') if request_data.get('mail_notification') is not None else ''}', 
+                                '{hashed_password if request_data.get('password') is not None else ''}',
+                                '{request_data.get('firstname') if request_data.get('firstname') is not None else ''}',
+                                '{request_data.get('lastname')}',
+                                {'0' if request_data.get('admin') is None else '1'},
+                                {request_data.get('status') if request_data.get('status') is not None else 1}, null,
+                                '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}',
+                                '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}',
+                                '{'Group' if request_data.get('type') else 'User'}',
+                                '{request_data.get('mail_notification') if request_data.get('mail_notification') is not None else ''}',
                                 {'"' + salt + '"' if request_data.get('password') is not None else 'null'}, 0,
                                 '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}',
-                                {request_data.get('specific_id') if request_data.get('specific_id') is not None else 'null'}) 
-                                on duplicate key update firstname = values(firstname), 
-                                lastname = values(lastname), 
-                                admin = values(admin), 
+                                {request_data.get('specific_id') if request_data.get('specific_id') is not None else 'null'})
+                                on duplicate key update firstname = values(firstname),
+                                lastname = values(lastname),
+                                admin = values(admin),
                                 status = values(status),
                                 updated_on = values(updated_on),
                                 mail_notification = values(mail_notification);
@@ -1178,7 +1184,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                     for group in request_data.get('groups'):
                         sql += f"""insert into groups_users (group_id, user_id) values ({group}, {request_data.get('id') if request_data.get('id') else '(select id from users order by id desc limit 1)'});"""
                     for member in request_data.get('members'):
-                        sql += f"""insert into members (user_id, project_id, created_on, mail_notification) 
+                        sql += f"""insert into members (user_id, project_id, created_on, mail_notification)
                                 values ({request_data.get('id') if request_data.get('id') else '(select id from users order by id desc limit 1)'}, {member['project']}, '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}', 0);"""
                         for role in member['roles']:
                             sql += f"""insert into member_roles (member_id, role_id) values ((select id from members order by id desc limit 1), {role});"""
@@ -1249,7 +1255,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                                     values ('{request_data.get('cf_name')}', """ + (
                                 '"' + ('\n- '.join(request_data.get('possible_values'))) + '"' if
                                 request_data.get(
-                                    'possible_values') != [] else 'null') + f""", '{request_data.get('default_value') if request_data.get('default_value') else ''}') 
+                                    'possible_values') != [] else 'null') + f""", '{request_data.get('default_value') if request_data.get('default_value') else ''}')
                                     on duplicate key update possible_values = values(possible_values), default_value = values(default_value)""" if request_data.get(
                                 'possible_values') != [] and request_data.get(
                                 'default_value') is not None else f"""delete from custom_fields where name = '{request_data.get('cf_name')}'"""
@@ -1519,11 +1525,11 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
                 if current_user['admin'] == 1:
                     with get_connection_pymysql() as connection:
                         with connection.cursor() as cursor:
-                            sql = (f"""insert into naryad_director ({'id,' if request_data.get('worker') else ''} name, user_id, status) 
+                            sql = (f"""insert into naryad_director ({'id,' if request_data.get('worker') else ''} name, user_id, status)
                         values ({str(request_data.get('worker')) + ',' if request_data.get('worker') else ''}
-                        '{request_data.get('worker_name')}', 
-                        {request_data.get('user')}, 
-                        {request_data.get('status') if request_data.get('status') else 1}) 
+                        '{request_data.get('worker_name')}',
+                        {request_data.get('user')},
+                        {request_data.get('status') if request_data.get('status') else 1})
                         on duplicate key update name=values(name), user_id=values(user_id), status=values(status);""" if request_data.get(
                                 'worker_name') or request_data.get('user') or request_data.get(
                                 'status') else f"delete from naryad_director where id = {request_data.get('worker')};") + "update users set specific_id = null where specific_id = 3;" + "".join(
@@ -1621,7 +1627,7 @@ async def api(files: Optional[UploadFile] = None, data: str = Form(default=None)
             response['traceback'] = traceback.format_exc()
     else:
         if login_check(login=request_data.get('login'), password=request_data.get('password')):
-            current_user = get_user(login=request_data.get('login'))[0]
+            current_user = get_users(login=request_data.get('login'))[0]
             auth_token = hashlib.md5(
                 bytes(current_user['login'] + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                       encoding='utf-8')).hexdigest()
@@ -1664,3 +1670,88 @@ async def main():
     with open('index.html', 'r') as file:
         content = file.read()
     return HTMLResponse(content=content, status_code=200)
+
+
+users_db = {}
+for user in get_users():
+    users_db[user['login']] = user
+
+
+def get_hashed_password(salt, password):
+    temp = hashlib.sha1(bytes(password, encoding='utf8')).hexdigest()
+    hashed_password = hashlib.sha1(bytes((salt + temp), encoding='utf8')).hexdigest()
+
+    return hashed_password
+
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+class User(BaseModel):
+    login: str
+    email: str | None = None
+    full_name: str | None = None
+    disabled: bool | None = None
+    token: str | None = None
+
+
+class UserInDB(User):
+    hashed_password: str
+    salt: str
+
+
+def get_user(db, username: str):
+    if username in db:
+        user_dict = db[username]
+        return UserInDB(**user_dict)
+
+
+def make_token(login):
+    token = (get_user(users_db, login).salt + login).encode('utf-8').hex()
+    return token
+
+
+def decode_token(token):
+    # This doesn't provide any security at all
+    id = None
+    for user in users_db:
+        if users_db[user]['token'] == token:
+    # Check the next version
+    user = get_user(users_db, token)
+    print(user)
+    return user
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    user = decode_token(token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
+@app.post("/token")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user_dict = users_db.get(form_data.username)
+    if not user_dict:
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    user = UserInDB(**user_dict)
+    hashed_password = get_hashed_password(user.salt, form_data.password)
+    if not hashed_password == user.hashed_password:
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    user.token = make_token(user.login)
+    return {"access_token": user.token, "token_type": "bearer"}
+
+
+@app.get("/users/me")
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    return current_user
