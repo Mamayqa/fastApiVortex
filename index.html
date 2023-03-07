@@ -126,6 +126,7 @@
         }
         let data = {
             method: 'get_task_data',
+            user_id: 13,
             task_on_page_count: 10,
             current_page_number: 1,
             current_user_id: 157,
@@ -134,7 +135,7 @@
         formData.append('data', JSON.stringify(data))
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
-            headers: { 'Authorization': sessionStorage.getItem('token_type') + ' ' + sessionStorage.getItem('token')},
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -152,11 +153,11 @@
             users_on_page_count: 10,
             current_page_number: 1,
             current_user_id: 157,
-            auth_token: sessionStorage.getItem('token')
         }
         formData.append('data', JSON.stringify(data))
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -174,11 +175,11 @@
             users_on_page_count: 10,
             current_page_number: 1,
             current_user_id: 157,
-            auth_token: sessionStorage.getItem('token')
         }
         formData.append('data', JSON.stringify(data))
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -192,9 +193,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'create_task',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             project: 1,
             tracker: 2,
             title: 'test',
@@ -234,6 +233,7 @@
 
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -247,9 +247,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'edit_task',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             task: 1,
             tracker: 2,
             members: [141, 4],
@@ -276,6 +274,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -289,9 +288,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'create_work',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             work_date: '2023-01-24',
             task: 1,
             worker_id: 8
@@ -304,6 +301,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -317,9 +315,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'get_work',
-            current_user_id: sessionStorage.getItem('current_user_id'),
 
         }
         formData.append('data', JSON.stringify(data))
@@ -329,6 +325,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -342,9 +339,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'delete_work',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             work_date: '2023-01-24',
             task: 1,
             worker_id: 8
@@ -357,6 +352,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -370,9 +366,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'edit_users',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             login: 'test_admin',
             password: 'test_admin',
             firstname: 'test',
@@ -396,6 +390,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -409,9 +404,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'edit_custom_field',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             cf_name: 'test_cf',
             possible_values: [],
             default_value: null
@@ -423,6 +416,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -436,9 +430,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'edit_trackers',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             // tracker_name: 'test_tracker',
             tracker: 31,
             // cfs:[2,12]
@@ -450,6 +442,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -463,9 +456,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'edit_roles',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             role: 22,
             // role_name: 'test_role2'
         }
@@ -476,6 +467,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -489,9 +481,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'edit_projects',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             // project_name: 'test_project22',
             project: 7
         }
@@ -502,6 +492,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -515,9 +506,7 @@
             formData.delete(key)
         }
         let data = {
-            auth_token: sessionStorage.getItem('token'),
             method: 'edit_workers',
-            current_user_id: sessionStorage.getItem('current_user_id'),
             worker_name: 'test_worker2',
             worker: 9,
             user: 11,
@@ -530,6 +519,7 @@
         document.getElementById('overview').innerHTML = null
         await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)

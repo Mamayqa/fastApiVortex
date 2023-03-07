@@ -3,7 +3,6 @@ import traceback
 import pymysql
 import datetime
 import hashlib
-import pprint
 
 from fastapi import FastAPI, UploadFile, Form, Request, HTTPException, status, Depends
 from fastapi.responses import HTMLResponse
@@ -333,7 +332,7 @@ from (select id,
             else f'''where issues.id = {issue_id}''' if issue_id
             else f'''where issues.description rlike '{search_text}' or issues.subject rlike '{search_text}' ''' if search_text
             else ''}) as issues
-                  {f'''limit {limit} offset {offset}'''}) as issues
+                  {f'''limit {limit} offset {offset}''' if limit and offset else ''}) as issues
                            left join custom_fields_trackers cf_t on issues.tracker_id = cf_t.tracker_id
                            left join custom_fields cf on cf_t.custom_field_id = cf.id
                            left join custom_values cfv
@@ -382,13 +381,6 @@ def get_custom_fields(**kwargs):
             return data
 
 
-@app.get("/", response_class=HTMLResponse)
-async def main():
-    with open('index.html', 'r') as file:
-        content = file.read()
-    return HTMLResponse(content=content, status_code=200)
-
-
 def get_hashed_password(salt, password):
     temp = hashlib.sha1(bytes(password, encoding='utf8')).hexdigest()
     hashed_password = hashlib.sha1(bytes((salt + temp), encoding='utf8')).hexdigest()
@@ -396,8 +388,8 @@ def get_hashed_password(salt, password):
     return hashed_password
 
 
-def make_token(login):
-    token = (UserInDB(**users_db[login]).salt + login).encode('utf-8').hex()
+def make_token(word):
+    token = (UserInDB(**users_db[login]).salt + word).encode('utf-8').hex()
     return token
 
 
@@ -406,10 +398,7 @@ def decode_token(token):
     # for user in users_db:
     #     if users_db[user]['token'] == token:
     # Check the next version
-    pprint.pprint(users_db)
-    pprint.pprint(token)
     user = users_active_session[token] if token in users_active_session else None
-    print(user)
     return user
 
 
@@ -439,10 +428,30 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     hashed_password = get_hashed_password(user.salt, form_data.password)
     if not hashed_password == user.hashed_password:
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-    # print(user)
     user.token = make_token(user.login)
     users_active_session[user.token] = user
-    return {"access_token": user.token, "token_type": "bearer"}
+    return {'access_token': user.token,
+            'current_user_data': {
+                'user_id': user.id,
+                'user_name': {
+                    'lastname': user.full_name.split(' ')[0],
+                    'firstname': user.full_name.split(' ')[1],
+                },
+                'user_type': user.type,
+                'user_roles': [{
+                    'project_id': role.project_id,
+                    'id': role.id,
+                    'name': role.name
+                } for role in user.roles] if user.roles else None,
+                'user_specific_id': user.specific_id,
+                'user_status': user.status,
+                'is_admin': user.admin,
+                'user_groups': [{
+                    'id': group.id,
+                    'name': group.name
+                } for group in user.groups] if
+                user.groups else None,
+            }}
 
 
 @app.post("/")
@@ -450,7 +459,6 @@ async def api(current_user: User = Depends(get_current_active_user),
               files: Optional[UploadFile] = None,
               data: str = Form(default=None)):
     files = files if files else []
-    print(current_user)
     request_data = json.loads(data) if data else {}
     response = {
         'error': False,
