@@ -50,23 +50,21 @@
         return cookieValue;
     }
 
-    // let logData = new FormData()
-    // // logData.append('data', JSON.stringify({
-    // //     login: 'test_admin',
-    // //     password: 'test_admin'
-    // // }))
-    // logData.append('data', 'test')
-    // // fetch('http://127.0.0.1:8000/api', {
-    // fetch('http://127.0.0.1:8000/api', {
-    //     method: 'POST',
-    //     body: 'logData',
-    // }).then((response) => response.json()).then((json) => {
-    //     sessionStorage.setItem('token', json.auth_token)
-    //     console.log(json)
-    //     sessionStorage.setItem('current_user_id', json.data.current_user_data.user_id)
-    // }).catch((error) => {
-    //     console.log(error)
-    // })
+    let logData = new FormData()
+    logData.append('username', 'test_admin')
+    logData.append('password', 'test_admin')
+    // fetch('http://127.0.0.1:8000/', {
+    fetch('http://127.0.0.1:8000/token', {
+        method: 'POST',
+        body: logData,
+    }).then((response) => response.json()).then((json) => {
+        sessionStorage.setItem('token', json.access_token)
+        sessionStorage.setItem('token_type', json.token_type)
+        console.log(json)
+        // sessionStorage.setItem('current_user_id', json.data.current_user_data.user_id)
+    }).catch((error) => {
+        console.log(error)
+    })
     let formData = new FormData()
     const dropZone = document.getElementById('dropzone')
     let list_files = []
@@ -134,8 +132,9 @@
             auth_token: sessionStorage.getItem('token')
         }
         formData.append('data', JSON.stringify(data))
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
+            headers: { 'Authorization': sessionStorage.getItem('token_type') + ' ' + sessionStorage.getItem('token')},
             body: formData,
         }).then((response) => response.json()).then((json) => {
             console.log(json)
@@ -156,7 +155,7 @@
             auth_token: sessionStorage.getItem('token')
         }
         formData.append('data', JSON.stringify(data))
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -178,7 +177,7 @@
             auth_token: sessionStorage.getItem('token')
         }
         formData.append('data', JSON.stringify(data))
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -233,7 +232,7 @@
         document.getElementById('overview').innerHTML = null
         console.log(formData)
 
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -275,7 +274,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -303,7 +302,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -328,7 +327,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -356,7 +355,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -395,7 +394,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -422,7 +421,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -449,7 +448,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -475,7 +474,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -501,7 +500,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
@@ -529,7 +528,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/api', {
+        await fetch('http://127.0.0.1:8000/', {
             method: 'POST',
             body: formData,
         }).then((response) => response.json()).then((json) => {
