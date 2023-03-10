@@ -11,20 +11,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from pymysql.constants import CLIENT
-from typing import Optional
+from typing import Optional, Union
 
 
 class User(BaseModel):
     id: int
     login: str
-    email: str | None = None
+    email: "str | None " = None
     full_name: str
     admin: bool
-    roles: str | None = None
-    groups: str | None = None
-    token: str | None = None
+    roles: "str | None " = None
+    groups: "str | None " = None
+    token: "str | None " = None
     status: int
-    specific_id: int | None = None
+    specific_id: "int | None " = None
     type: str
 
 
