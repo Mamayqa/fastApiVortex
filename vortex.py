@@ -3,9 +3,12 @@ import traceback
 import pymysql
 import datetime
 import hashlib
+import logging
+import uvicorn
+import os
 
 from fastapi import FastAPI, UploadFile, Form, Request, HTTPException, status, Depends
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -33,6 +36,9 @@ class UserInDB(User):
     salt: str
 
 
+TOKEN = os.getenv('BOT_VORTEX_TOKEN')
+file_path = os.path.dirname(__file__)
+
 app = FastAPI()
 
 app.add_middleware(
@@ -45,6 +51,25 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+if not os.path.exists(file_path + '/files/'):
+    os.mkdir(file_path + '/files/')
+if not os.path.exists(file_path + '/logs/'):
+    os.mkdir(file_path + '/logs/')
+if not os.path.exists(file_path + '/report/'):
+    os.mkdir(file_path + '/report/')
+
+
+@app.on_event("startup")
+async def startup_event():
+    logger = logging.getLogger("uvicorn.error")
+    handler = logging.handlers.RotatingFileHandler("logs/error.log", mode="a", maxBytes=100 * 1024, backupCount=3)
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
+    logger = logging.getLogger("uvicorn.access")
+    handler = logging.handlers.RotatingFileHandler("logs/access.log", mode="a", maxBytes=100 * 1024, backupCount=3)
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
 
 
 def get_connection_pymysql():
@@ -606,20 +631,20 @@ async def api(current_user: User = Depends(get_current_active_user),
                 path = datetime.datetime.now().strftime('%Y') + '/' + datetime.datetime.now().strftime(
                     '%m') + '/'
                 if not os.path.exists(
-                        app.config['UPLOAD_FOLDER'] + datetime.datetime.now().strftime(
-                            '%Y') + '/') and not os.path.exists(app.config['UPLOAD_FOLDER'] + path):
-                    os.mkdir(app.config['UPLOAD_FOLDER'] + datetime.datetime.now().strftime('%Y') + '/')
-                    os.mkdir(app.config['UPLOAD_FOLDER'] + path)
-                elif os.path.exists(app.config['UPLOAD_FOLDER'] + datetime.datetime.now().strftime(
-                        '%Y') + '/') and not os.path.exists(app.config['UPLOAD_FOLDER'] + path):
-                    os.mkdir(app.config['UPLOAD_FOLDER'] + path)
+                        'files/' + datetime.datetime.now().strftime(
+                            '%Y') + '/') and not os.path.exists('files/' + path):
+                    os.mkdir('files/' + datetime.datetime.now().strftime('%Y') + '/')
+                    os.mkdir('files/' + path)
+                elif os.path.exists('files/' + datetime.datetime.now().strftime(
+                        '%Y') + '/') and not os.path.exists('files/' + path):
+                    os.mkdir('files/' + path)
                 if '.' in file.filename:
                     filename = temp[0] + '____' + datetime.datetime.now().strftime('%d %H:%M:%S') + '.' + temp[
                         1]
                 else:
                     filename = temp + '____' + datetime.datetime.now().strftime('%d %H:%M:%S')
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'] + path, filename))
-                size = os.path.getsize(os.path.join(app.config['UPLOAD_FOLDER'] + path + filename))
+                file.save(os.path.join('files/' + path, filename))
+                size = os.path.getsize(os.path.join('files/' + path + filename))
                 sql_attach += f'''insert into attachments (container_id, filename, disk_filename, filesize, content_type, author_id, created_on, description, disk_directory)
                                                     values ((select id from issues order by id desc limit 1), '{file.filename}', '{filename}', {size}, '{file.content_type}',
                                                     {current_user.id}, '{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}', '', '{path[:-1]}');'''
@@ -674,13 +699,13 @@ async def api(current_user: User = Depends(get_current_active_user),
                 path = datetime.datetime.now().strftime('%Y') + '/' + datetime.datetime.now().strftime(
                     '%m') + '/'
                 if not os.path.exists(
-                        app.config['UPLOAD_FOLDER'] + datetime.datetime.now().strftime(
-                            '%Y') + '/') and not os.path.exists(app.config['UPLOAD_FOLDER'] + path):
-                    os.mkdir(app.config['UPLOAD_FOLDER'] + datetime.datetime.now().strftime('%Y') + '/')
-                    os.mkdir(app.config['UPLOAD_FOLDER'] + path)
-                elif os.path.exists(app.config['UPLOAD_FOLDER'] + datetime.datetime.now().strftime(
-                        '%Y') + '/') and not os.path.exists(app.config['UPLOAD_FOLDER'] + path):
-                    os.mkdir(app.config['UPLOAD_FOLDER'] + path)
+                        'files/' + datetime.datetime.now().strftime(
+                            '%Y') + '/') and not os.path.exists('files/' + path):
+                    os.mkdir('files/' + datetime.datetime.now().strftime('%Y') + '/')
+                    os.mkdir('files/' + path)
+                elif os.path.exists('files/' + datetime.datetime.now().strftime(
+                        '%Y') + '/') and not os.path.exists('files/' + path):
+                    os.mkdir('files/' + path)
                 if '.' in file.filename:
                     filename = temp[0] + '____' + datetime.datetime.now().strftime(
                         '%d %H:%M:%S') + '___' + str(random.randint(1, 10000)) + '.' + temp[
@@ -688,8 +713,8 @@ async def api(current_user: User = Depends(get_current_active_user),
                 else:
                     filename = temp + '____' + datetime.datetime.now().strftime(
                         '%d %H:%M:%S') + '___' + str(random.randint(1, 10000))
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'] + path, filename))
-                size = os.path.getsize(os.path.join(app.config['UPLOAD_FOLDER'] + path + filename))
+                file.save(os.path.join('files/' + path, filename))
+                size = os.path.getsize(os.path.join('files/' + path + filename))
                 sql_journal_details += f"insert into journal_details (journal_id, property, prop_key, old_value, value) values ((select id from journals order by id desc limit 1), 'attachment', (select id from attachments where disk_filename = '{filename}' and disk_directory = '{path[:-1]}'), null, '{file.filename}');"
                 sql_attach += f'''insert into attachments (container_id, filename, disk_filename, filesize, content_type, author_id, created_on, description, disk_directory)
                                                                 values ((select id from issues order by id desc limit 1), '{file.filename}', '{filename}', {size}, '{file.content_type}',
@@ -1231,6 +1256,16 @@ async def api(current_user: User = Depends(get_current_active_user),
 
 @app.get("/", response_class=HTMLResponse)
 async def main():
-    with open('index.html', 'r') as file:
+    with open('static/html/index.html', 'r') as file:
         content = file.read()
     return HTMLResponse(content=content, status_code=200)
+
+
+@app.get("/error")
+async def error():
+    return 1 / 0
+
+
+@app.get('/favicon.ico', include_in_schema=False)
+async def favicon():
+    return FileResponse(None)
