@@ -17,14 +17,14 @@ from typing import Optional, Union
 class User(BaseModel):
     id: int
     login: str
-    email: "str | None " = None
+    email: str | None
     full_name: str
     admin: bool
-    roles: "str | None " = None
-    groups: "str | None " = None
-    token: "str | None " = None
+    roles: str | None = None
+    groups: str | None = None
+    token: str | None = None
     status: int
-    specific_id: "int | None " = None
+    specific_id: int | None = None
     type: str
 
 
