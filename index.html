@@ -59,7 +59,6 @@
         body: logData,
     }).then((response) => response.json()).then((json) => {
         sessionStorage.setItem('token', json.access_token)
-        sessionStorage.setItem('token_type', json.token_type)
         console.log(json)
         // sessionStorage.setItem('current_user_id', json.data.current_user_data.user_id)
     }).catch((error) => {
@@ -126,10 +125,8 @@
         }
         let data = {
             method: 'get_task_data',
-            user_id: 13,
-            task_on_page_count: 10,
+            on_page_count: 10,
             current_page_number: 1,
-            current_user_id: 157,
             auth_token: sessionStorage.getItem('token')
         }
         formData.append('data', JSON.stringify(data))
@@ -150,7 +147,7 @@
         }
         let data = {
             method: 'get_info_for_admin',
-            users_on_page_count: 10,
+            on_page_count: 10,
             current_page_number: 1,
             current_user_id: 157,
         }
@@ -172,7 +169,7 @@
         }
         let data = {
             method: 'get_info_for_create',
-            users_on_page_count: 10,
+            on_page_count: 10,
             current_page_number: 1,
             current_user_id: 157,
         }
@@ -220,7 +217,7 @@
             method: "get_task_data",
             current_user_id: 157,
             user_id: 157,
-            task_on_page_count: 10,
+            on_page_count: 10,
             current_page_number: 1,
             auth_token: "3062e3270717611e5135b40f5b671be8"
         }

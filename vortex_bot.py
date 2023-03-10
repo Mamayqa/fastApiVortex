@@ -11,8 +11,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.dispatcher import FSMContext
 
-from main import get_connection_pymysql, get_issue
-
+from vortex import get_connection_pymysql, get_issue
 
 # logging.basicConfig(level=logging.DEBUG)
 TOKEN = os.getenv('BOT_VORTEX_TOKEN')
@@ -32,6 +31,71 @@ kb.add(button_issue)
 
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
+
+
+def login_check(**kwargs):
+    login = kwargs.get('login')
+    password = kwargs.get('password')
+    if not login or not password:
+        return False
+    with get_connection_pymysql() as connection:
+        with connection.cursor() as cursor:
+            sql = f"""select admin,
+       specific_id,
+       firstname,
+       lastname,
+       temp.id,
+       director_id,
+       director_status,
+       hashed_password,
+       salt,
+       user_groups,
+       group_concat(r.id) as roles
+from (select admin,
+             specific_id,
+             firstname,
+             lastname,
+             temp2.id,
+             director_id,
+             director_status,
+             hashed_password,
+             salt,
+             group_concat(group_id) as user_groups
+      from (select admin,
+                   specific_id,
+                   firstname,
+                   lastname,
+                   u.id,
+                   group_concat(nd.id)     as director_id,
+                   group_concat(nd.status) as director_status,
+                   hashed_password,
+                   salt
+            from users as u
+                     left join service_vortex_links on u.id = service_vortex_links.vortex_user_id
+                     left join naryad_director nd on u.id = nd.user_id
+            where {"login = '" + login + "'" if kwargs.get('service_id') is None else "service_user_id =" + kwargs.get('service_id')}
+              and type = 'User') as temp2
+               left join groups_users gu on temp2.id = gu.user_id) as temp
+         left join members m on temp.id = m.user_id
+         left join member_roles mr on m.id = mr.member_id
+         left join roles r on mr.role_id = r.id"""
+            cursor.execute(sql)
+            data = cursor.fetchone()
+            if not (data['id'] is not None or kwargs.get('service_id') is not None):
+                return None
+            else:
+                if kwargs.get('service_id') is not None:
+                    data['roles'] = [item for item in data['roles'].split(',')]
+                    data['groups'] = [item for item in data['user_groups'].split(',')]
+                    return data
+                hashed_password = get_hashed_password(salt=data.pop('salt'), password=password)
+                if data.pop('hashed_password') != hashed_password:
+                    return False
+                else:
+                    data['roles'] = [item for item in data['roles'].split(',')]
+                    data['groups'] = [item for item in data['user_groups'].split(',')]
+                    return data
+
 
 def get_assignments(id):
     with get_connection_pymysql() as connection:
@@ -55,6 +119,33 @@ def get_assignments(id):
                        and issues.status_id != 5 and issues.status_id != 6"""
             cursor.execute(sql)
             return cursor.fetchall()
+
+
+def get_cf_data(**kwargs):
+    """
+
+    :param kwargs:
+    :issue_id: int
+    :return: dict
+    """
+    issue_id = kwargs.get('issue_id')
+    with get_connection_pymysql() as connection:
+        with connection.cursor() as cursor:
+            sql = f"""  select cv.value,
+                               cf.name,
+                               cf.id
+                        from issues as i
+                                 join custom_values cv on i.id = cv.customized_id
+                                 join custom_fields cf on cv.custom_field_id = cf.id
+                                 join users u on i.assigned_to_id = u.id
+                                 join users us on i.author_id = us.id
+                                 join enumerations e on e.id = i.priority_id
+                        where i.id = {issue_id}"""
+            cursor.execute(sql)
+            data = {}
+            for result in cursor.fetchall():
+                data.update({str(result['id']): {'name': str(result['name']), 'value': str(result['value'])}})
+    return data
 
 
 class MainStates(StatesGroup):
@@ -138,12 +229,11 @@ async def send_issue(data):
         text = callback_query.data.split('/')[1]
         if re.fullmatch(r'\d{1,5}', text):
             issue = get_issue(issue_id=text)[0]
-            print(issue)
             await callback_query.message.answer(
                 f"{issue['tracker']} {issue['id']}\n{issue['subject']}\n{issue['description'].replace('<p>', '').replace('</p>', '').replace('<br>', '')}\n",
                 parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup().add(
-                    InlineKeyboardButton('Подробнее', callback_data='issue_full/' + str(issue['id']))))
+                reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton('Подробнее', callback_data='issue_full/' + str(issue['id'])),
+                    InlineKeyboardButton('Подробнее', callback_data='issue_full/' + str(issue['id']))).add(InlineKeyboardButton('Подробнее', callback_data='issue_full/' + str(issue['id']))))
             await callback_query.answer()
         else:
             await callback_query.message.answer('Введен некорректный номер заявки',
@@ -290,7 +380,6 @@ async def send_issue_handle(callback_query: types.CallbackQuery):
 @dp.callback_query_handler(lambda c: c.data and c.data.startswith('issue_full'),
                            state="*")
 async def send_issue_full_handle(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_reply_markup()
     issue_id = callback_query.data.split('/')[1]
     cfs = get_cf_data(issue_id=issue_id)
     answer = f"Статус: {get_status(issue_id)}\n"
@@ -299,7 +388,7 @@ async def send_issue_full_handle(callback_query: types.CallbackQuery):
             answer = answer + re.search(r'http(s)?://.+\b', cf['value']).group(0)
         else:
             answer = answer + f"{cf['name']}: {cf['value']}\n"
-    await callback_query.message.answer(answer, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup().add(
+    await callback_query.message.edit_text(answer, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup().add(
         InlineKeyboardButton('История изменений', callback_data='issue_history/' + str(issue_id))))
     await callback_query.answer()
 
@@ -307,7 +396,8 @@ async def send_issue_full_handle(callback_query: types.CallbackQuery):
 @dp.callback_query_handler(lambda c: c.data and c.data.startswith('issue_history'),
                            state="*")
 async def send_issue_history(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup().add(
+    answer = 'Тест'
+    await callback_query.message.edit_text(answer, reply_markup=InlineKeyboardMarkup().add(
         InlineKeyboardButton('История', callback_data='test')))
     await callback_query.answer()
 

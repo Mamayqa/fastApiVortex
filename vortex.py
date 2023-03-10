@@ -14,25 +14,14 @@ from pymysql.constants import CLIENT
 from typing import Optional
 
 
-class Role(BaseModel):
-    id: int
-    name: str
-    project_id: int
-
-
-class Group(BaseModel):
-    id: int
-    name: str
-
-
 class User(BaseModel):
     id: int
     login: str
     email: str | None = None
     full_name: str
     admin: bool
-    roles: list[Role] = []
-    groups: list[Group] = []
+    roles: str | None = None
+    groups: str | None = None
     token: str | None = None
     status: int
     specific_id: int | None = None
@@ -137,18 +126,6 @@ def get_users(**kwargs):
 users_db = {}
 users_active_session = {}
 for user in get_users():
-    roles = [{
-        'project_id': role.split('/')[0],
-        'id': role.split('/')[1],
-        'name': role.split('/')[2],
-    } for role in user['roles'].split(',')] if user.get('roles') else None
-    groups = [{
-        'id': group.split('/')[0],
-        'name': group.split('/')[1],
-    } for group in user['groups'].split(',')] if user.get('groups') else None
-    user['roles'] = [Role(**role) for role in roles] if roles else None
-    user['groups'] = [Group(**group) for group in groups] if groups else None
-
     users_db[user['login']] = user
 
 
@@ -384,20 +361,15 @@ def get_custom_fields(**kwargs):
 def get_hashed_password(salt, password):
     temp = hashlib.sha1(bytes(password, encoding='utf8')).hexdigest()
     hashed_password = hashlib.sha1(bytes((salt + temp), encoding='utf8')).hexdigest()
-
     return hashed_password
 
 
 def make_token(word):
-    token = (UserInDB(**users_db[login]).salt + word).encode('utf-8').hex()
+    token = (UserInDB(**users_db[word]).salt + word).encode('utf-8').hex()
     return token
 
 
 def decode_token(token):
-    # This doesn't provide any security at all
-    # for user in users_db:
-    #     if users_db[user]['token'] == token:
-    # Check the next version
     user = users_active_session[token] if token in users_active_session else None
     return user
 
@@ -405,53 +377,68 @@ def decode_token(token):
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     user = decode_token(token)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        user = {
+            'error': True,
+            'error_message': 'Invalid authentication credentials'
+        }
     return user
 
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)):
-    if current_user.status == 3:
-        raise HTTPException(status_code=400, detail="Inactive user")
+    if current_user is UserInDB and current_user.status == 3:
+        current_user = {
+            'error': True,
+            'error_message': 'User is deactivated'
+        }
     return current_user
 
 
 @app.post("/token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    response = {
+        'error': False,
+    }
     user_dict = users_db.get(form_data.username)
     if not user_dict:
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
+        response.update({
+            'error': True,
+            'error_message': 'Login incorrect'
+        })
+        return response
     user = UserInDB(**user_dict)
     hashed_password = get_hashed_password(user.salt, form_data.password)
     if not hashed_password == user.hashed_password:
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
+        response.update({
+            'error': True,
+            'error_message': 'Password incorrect'
+        })
+        return response
     user.token = make_token(user.login)
     users_active_session[user.token] = user
-    return {'access_token': user.token,
-            'current_user_data': {
-                'user_id': user.id,
-                'user_name': {
-                    'lastname': user.full_name.split(' ')[0],
-                    'firstname': user.full_name.split(' ')[1],
-                },
-                'user_type': user.type,
-                'user_roles': [{
-                    'project_id': role.project_id,
-                    'id': role.id,
-                    'name': role.name
-                } for role in user.roles] if user.roles else None,
-                'user_specific_id': user.specific_id,
-                'user_status': user.status,
-                'is_admin': user.admin,
-                'user_groups': [{
-                    'id': group.id,
-                    'name': group.name
-                } for group in user.groups] if
-                user.groups else None,
-            }}
+    response.update({
+        'access_token': user.token,
+        'current_user': {
+            'id': user.id,
+            'name': {
+                'lastname': user.full_name.split(' ')[0],
+                'firstname': user.full_name.split(' ')[1],
+            },
+            'type': user.type,
+            'roles': [{
+                'project_id': role.split('/')[0],
+                'id': role.split('/')[1],
+                'name': role.split('/')[2]
+            } for role in user.roles.split(',')] if user.roles else None,
+            'specific_id': user.specific_id,
+            'status': user.status,
+            'is_admin': user.admin,
+            'groups': [{
+                'id': group.split('/')[0],
+                'name': group.split('/')[1]
+            } for group in user.groups.split(',')] if user.groups else None,
+        }
+    })
+    return response
 
 
 @app.post("/")
@@ -460,6 +447,8 @@ async def api(current_user: User = Depends(get_current_active_user),
               data: str = Form(default=None)):
     files = files if files else []
     request_data = json.loads(data) if data else {}
+    if type(current_user) is dict:
+        return current_user
     response = {
         'error': False,
         'current_user_data': {
@@ -470,52 +459,48 @@ async def api(current_user: User = Depends(get_current_active_user),
             },
             'user_type': current_user.type,
             'user_roles': [{
-                'project_id': role.project_id,
-                'id': role.id,
-                'name': role.name
-            } for role in current_user.roles] if current_user.roles else None,
+                'project_id': role.split('/')[0],
+                'id': role.split('/')[1],
+                'name': role.split('/')[2]
+            } for role in current_user.roles.split(',')] if current_user.roles else None,
             'user_specific_id': current_user.specific_id,
             'user_status': current_user.status,
             'is_admin': current_user.admin,
             'user_groups': [{
-                'id': group.id,
-                'name': group.name
-            } for group in current_user.groups] if
-            current_user.groups else None,
+                'id': group.split('/')[0],
+                'name': group.split('/')[1]
+            } for group in current_user.groups.split(',')] if current_user.groups else None,
         }
     }
     try:
         if request_data.get('method') == 'get_task_data':
-            if request_data.get('current_user_id') is None:
+            if request_data.get('on_page_count') is None:
                 response['error'] = True
-                response['error_text'] = 'current_user_id is null'
-            elif request_data.get('task_on_page_count') is None:
-                response['error'] = True
-                response['error_text'] = 'task_on_page_count is null'
+                response['error_message'] = 'on_page_count is null'
             elif request_data.get('current_page_number') is None:
                 response['error'] = True
-                response['error_text'] = 'current_page_number is null'
+                response['error_message'] = 'current_page_number is null'
             else:
                 tasks = []
                 total_tasks = None
                 for key, item in enumerate(
-                        (get_issue(limit=int(request_data.get('task_on_page_count')),
-                                   offset=int(request_data.get('task_on_page_count')) * (int(
+                        (get_issue(limit=int(request_data.get('on_page_count')),
+                                   offset=int(request_data.get('on_page_count')) * (int(
                                        request_data.get('current_page_number')) - 1),
                                    user_id=request_data.get('user_id')) if request_data.get(
                             'user_id')
-                        else get_issue(limit=int(request_data.get('task_on_page_count')),
-                                       offset=int(request_data.get('task_on_page_count')) * (int(
+                        else get_issue(limit=int(request_data.get('on_page_count')),
+                                       offset=int(request_data.get('on_page_count')) * (int(
                                            request_data.get('current_page_number')) - 1),
                                        issue_id=request_data.get('issue_id')) if request_data.get(
                             'issue_id')
-                        else get_issue(limit=int(request_data.get('task_on_page_count')),
-                                       offset=int(request_data.get('task_on_page_count')) * (int(
+                        else get_issue(limit=int(request_data.get('on_page_count')),
+                                       offset=int(request_data.get('on_page_count')) * (int(
                                            request_data.get('current_page_number')) - 1),
                                        search_text=request_data.get('search_text')) if request_data.get(
                             'search_text')
-                        else get_issue(limit=int(request_data.get('task_on_page_count')),
-                                       offset=int(request_data.get('task_on_page_count')) * (int(
+                        else get_issue(limit=int(request_data.get('on_page_count')),
+                                       offset=int(request_data.get('on_page_count')) * (int(
                                            request_data.get('current_page_number')) - 1)))):
                     total_tasks = item['total_tasks']
                     tasks.append({
@@ -590,9 +575,9 @@ async def api(current_user: User = Depends(get_current_active_user),
                     'method': 'get_task_data',
                     'data': {
                         'total_tasks': int(total_tasks),
-                        'tasks_on_page_count': int(request_data.get('task_on_page_count')),
+                        'on_page_count': int(request_data.get('on_page_count')),
                         'current_page_number': int(request_data.get('current_page_number')),
-                        'page_count': int(total_tasks) // int(request_data.get('task_on_page_count')) + 1,
+                        'page_count': int(total_tasks) // int(request_data.get('on_page_count')) + 1,
                         'tasks': tasks,
                     }
                 })
@@ -832,7 +817,7 @@ async def api(current_user: User = Depends(get_current_active_user),
                     else:
                         response.update({
                             'error': True,
-                            'error_text': 'You do not have permissions',
+                            'error_message': 'You do not have permissions',
                             'method': 'get_work',
                             'data': {
                             }
@@ -1019,9 +1004,9 @@ async def api(current_user: User = Depends(get_current_active_user),
                     'method': 'get_info_for_admin',
                     'data': {
                         'total__users': len(users),
-                        'users_on_page_count': request_data.get('users_on_page_count'),
+                        'on_page_count': request_data.get('on_page_count'),
                         'current_page_number': request_data.get('current_page_number'),
-                        'page_count': len(users) // int(request_data.get('users_on_page_count')) + 1,
+                        'page_count': len(users) // int(request_data.get('on_page_count')) + 1,
                         'users': users,
                         'custom_fields': cfs,
                         'trackers': trackers,
@@ -1034,7 +1019,7 @@ async def api(current_user: User = Depends(get_current_active_user),
             else:
                 response.update({
                     'error': True,
-                    'error_text': 'You are not an administrator',
+                    'error_message': 'You are not an administrator',
                     'method': 'get_info_for_admin',
                     'data': {
                     }
@@ -1088,7 +1073,7 @@ async def api(current_user: User = Depends(get_current_active_user),
             else:
                 response.update({
                     'error': True,
-                    'error_text': 'You are not an administrator',
+                    'error_message': 'You are not an administrator',
                     'method': 'edit_users',
                     'data': {
                     }
@@ -1115,7 +1100,7 @@ async def api(current_user: User = Depends(get_current_active_user),
             else:
                 response.update({
                     'error': True,
-                    'error_text': 'You are not an administrator',
+                    'error_message': 'You are not an administrator',
                     'method': 'edit_custom_field',
                     'data': {
                     }
@@ -1146,7 +1131,7 @@ async def api(current_user: User = Depends(get_current_active_user),
             else:
                 response.update({
                     'error': True,
-                    'error_text': 'You are not an administrator',
+                    'error_message': 'You are not an administrator',
                     'method': 'edit_trackers',
                     'data': {
                     }
@@ -1170,7 +1155,7 @@ async def api(current_user: User = Depends(get_current_active_user),
             else:
                 response.update({
                     'error': True,
-                    'error_text': 'You are not an administrator',
+                    'error_message': 'You are not an administrator',
                     'method': 'edit_roles',
                     'data': {
                     }
@@ -1194,7 +1179,7 @@ async def api(current_user: User = Depends(get_current_active_user),
             else:
                 response.update({
                     'error': True,
-                    'error_text': 'You are not an administrator',
+                    'error_message': 'You are not an administrator',
                     'method': 'edit_projects',
                     'data': {
                     }
@@ -1224,7 +1209,7 @@ async def api(current_user: User = Depends(get_current_active_user),
             else:
                 response.update({
                     'error': True,
-                    'error_text': 'You are not an administrator',
+                    'error_message': 'You are not an administrator',
                     'method': 'edit_workers',
                     'data': {
                     }
@@ -1232,13 +1217,13 @@ async def api(current_user: User = Depends(get_current_active_user),
         else:
             response.update({
                 'error': True,
-                'error_text': 'Invalid method',
+                'error_message': 'Invalid method',
                 'data': {
                 }
             })
     except Exception as e:
         response['error'] = True
-        response['error_text'] = 'Critical error'
+        response['error_message'] = 'Critical error'
         response['traceback'] = traceback.format_exc()
 
     return response
