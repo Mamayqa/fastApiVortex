@@ -53,14 +53,12 @@
     let logData = new FormData()
     logData.append('username', 'test_admin')
     logData.append('password', 'test_admin')
-    // fetch('http://127.0.0.1:8000/', {
-    fetch('http://127.0.0.1:8000/token', {
+    fetch('http://vortex.provodov-net.ru/token', {
         method: 'POST',
         body: logData,
     }).then((response) => response.json()).then((json) => {
         sessionStorage.setItem('token', json.access_token)
         console.log(json)
-        // sessionStorage.setItem('current_user_id', json.data.current_user_data.user_id)
     }).catch((error) => {
         console.log(error)
     })
@@ -130,7 +128,7 @@
             auth_token: sessionStorage.getItem('token')
         }
         formData.append('data', JSON.stringify(data))
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -152,7 +150,7 @@
             current_user_id: 157,
         }
         formData.append('data', JSON.stringify(data))
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -174,7 +172,7 @@
             current_user_id: 157,
         }
         formData.append('data', JSON.stringify(data))
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -228,7 +226,7 @@
         document.getElementById('overview').innerHTML = null
         console.log(formData)
 
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -269,7 +267,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -296,7 +294,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -320,7 +318,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -347,7 +345,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -385,7 +383,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -411,7 +409,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -437,7 +435,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -462,7 +460,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -487,7 +485,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
@@ -514,7 +512,7 @@
         list_files.forEach(file => formData.append('file', file))
         list_files = []
         document.getElementById('overview').innerHTML = null
-        await fetch('http://127.0.0.1:8000/', {
+        await fetch('http://vortex.provodov-net.ru/', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('token')},
             body: formData,
