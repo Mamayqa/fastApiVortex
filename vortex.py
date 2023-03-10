@@ -17,7 +17,7 @@ from typing import Optional, Union
 class User(BaseModel):
     id: int
     login: str
-    email: str | None
+    email: str | None = None
     full_name: str
     admin: bool
     roles: str | None = None
