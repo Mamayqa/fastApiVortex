@@ -52,23 +52,31 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-if not os.path.exists(file_path + '/files/'):
-    os.mkdir(file_path + '/files/')
-if not os.path.exists(file_path + '/logs/'):
-    os.mkdir(file_path + '/logs/')
-if not os.path.exists(file_path + '/report/'):
-    os.mkdir(file_path + '/report/')
-
 
 @app.on_event("startup")
 async def startup_event():
+    if not os.path.exists(file_path + '/files/'):
+        os.mkdir(file_path + '/files/')
+    if not os.path.exists(file_path + '/logs/'):
+        os.mkdir(file_path + '/logs/')
+    if not os.path.exists(file_path + '/logs/' + datetime.datetime.now().strftime('%Y') + '/'):
+        os.mkdir(file_path + '/logs/' + datetime.datetime.now().strftime('%Y') + '/')
+    if not os.path.exists(
+            file_path + '/logs/' + datetime.datetime.now().strftime('%Y') + '/' + datetime.datetime.now().strftime(
+                '%m') + '/'):
+        os.mkdir(file_path + '/logs/' + datetime.datetime.now().strftime('%Y') + '/' + datetime.datetime.now().strftime(
+            '%m') + '/')
+    if not os.path.exists(file_path + '/report/'):
+        os.mkdir(file_path + '/report/')
     logger = logging.getLogger("uvicorn.error")
-    handler = logging.handlers.RotatingFileHandler("logs/error.log", mode="a", maxBytes=100 * 1024, backupCount=3)
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    handler = logging.handlers.RotatingFileHandler('logs/' + datetime.datetime.now().strftime('%Y') + '/' + datetime.datetime.now().strftime(
+        '%m') + '/' + 'error_'+datetime.datetime.now().strftime('%d')+'.log', mode="a", maxBytes=100 * 1024, backupCount=3)
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s %(message)s"))
     logger.addHandler(handler)
     logger = logging.getLogger("uvicorn.access")
-    handler = logging.handlers.RotatingFileHandler("logs/access.log", mode="a", maxBytes=100 * 1024, backupCount=3)
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    handler = logging.handlers.RotatingFileHandler('logs/' + datetime.datetime.now().strftime('%Y') + '/' + datetime.datetime.now().strftime(
+        '%m') + '/' + 'access_'+datetime.datetime.now().strftime('%d')+'.log', mode="a", maxBytes=100 * 1024, backupCount=3)
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s %(message)s"))
     logger.addHandler(handler)
 
 
@@ -241,6 +249,7 @@ select id,
        parent_tracker,
        subtasks,
        cfs,
+       sl,
        total_tasks,
        group_concat(journal_created_on, '|sep_for_j|', journal_notes, '|sep_for_j|', journal_user_id, '|sep_for_j|',
                     journal_details separator '|____|') as journal
@@ -268,6 +277,7 @@ from (select id,
              parent_title,
              subtasks,
              cfs,
+             group_concat(sl separator '|!!|') as sl,
              total_tasks,
              concat(ir_issues, '|/|', ir2_issues)   as relations,
              group_concat(property, '|sep_for_jd|', prop_key, '|sep_for_jd|', old_value, '|sep_for_jd|',
@@ -302,6 +312,7 @@ from (select id,
                    parent.subject                                                                           as parent_title,
                    parent_tracker.name                                                                      as parent_tracker,
                    parent_status.name                                                                       as parent_status,
+                   concat(stt.name, '|/|', group_concat(s.name, '/|/', s.value, '/|/', s.is_success separator '|#|')) as sl,
                    group_concat(distinct subtasks.id, '/|/', subtasks.subject, '/|/', subtasks_status.name, '/|/',
                                 subtasks_tracker.name separator '|/|')                                      as subtasks,
                    group_concat(distinct ir_issues.id, '/|/', ir_issues.subject separator
@@ -361,9 +372,14 @@ from (select id,
                      left join issues as parent on issues.parent_id = parent.id
                      left join trackers parent_tracker on parent.tracker_id = parent_tracker.id
                      left join issue_statuses as parent_status on parent.status_id = parent_status.id
+                     left join subtasks_to_task stt on ir_issues.id = stt.task_id
+                     left join subtask s on stt.id = s.subtask_list_id
+                     left join subtasks_to_task stt on issues.id = stt.task_id
+                     left join subtask s on stt.id = s.subtask_list_id
             group by j.id, issues.id, jd.id) as temp
       group by id, temp.j_id) as temp2
 group by id"""
+            print(sql)
             cursor.execute(sql)
             return cursor.fetchall()
 
@@ -476,22 +492,23 @@ async def api(current_user: User = Depends(get_current_active_user),
         return current_user
     response = {
         'error': False,
-        'current_user_data': {
-            'user_id': current_user.id,
-            'user_name': {
+        'error_text': '',
+        'current_user': {
+            'id': current_user.id,
+            'name': {
                 'lastname': current_user.full_name.split(' ')[0],
                 'firstname': current_user.full_name.split(' ')[1],
             },
-            'user_type': current_user.type,
-            'user_roles': [{
+            'type': current_user.type,
+            'roles': [{
                 'project_id': role.split('/')[0],
                 'id': role.split('/')[1],
                 'name': role.split('/')[2]
             } for role in current_user.roles.split(',')] if current_user.roles else None,
-            'user_specific_id': current_user.specific_id,
-            'user_status': current_user.status,
+            'specific_id': current_user.specific_id,
+            'status': current_user.status,
             'is_admin': current_user.admin,
-            'user_groups': [{
+            'groups': [{
                 'id': group.split('/')[0],
                 'name': group.split('/')[1]
             } for group in current_user.groups.split(',')] if current_user.groups else None,
@@ -532,12 +549,11 @@ async def api(current_user: User = Depends(get_current_active_user),
                         'number': key,
                         'image_data': item['icon'],
                         'task_id': item['id'],
-                        'tags': [
-                            item['status'],
-                            item['tracker'].strip(),
-                        ],
+                        'folder': item['tracker'].strip(),
+                        'status': item['status'],
+                        'tags': [],
                         'complete': item['done_ratio'],
-                        'task_tlt': item['subject'],
+                        'subject': item['subject'],
                         'date_created': item['created_on'].timestamp(),
                         'date_edited': item['updated_on'].timestamp(),
                         'responsible': item['responsible'].strip() if item['responsible'] else None,
@@ -548,16 +564,13 @@ async def api(current_user: User = Depends(get_current_active_user),
                             'status': item['parent_status'],
                             'tracker': item['parent_tracker'],
                         },
-                        'total_custom_fields': len(item['cfs'].split('|/|')) if item[
-                                                                                    'cfs'] is not None else None,
+                        'total_custom_fields': len(item['cfs'].split('|/|')) if item['cfs'] is not None else None,
                         'custom_fields': [{
                             'id': attachment.split('//|//')[0],
                             'name': attachment.split('//|//')[1],
                             'value': attachment.split('//|//')[2],
-                        } for attachment in item['cfs'].split('||/||')] if item[
-                                                                               'cfs'] is not None else None,
-                        'total_actions': len(item['journal'].split('|____|')) if item[
-                                                                                     'journal'] is not None else None,
+                        } for attachment in item['cfs'].split('||/||')] if item['cfs'] is not None else None,
+                        'total_actions': len(item['journal'].split('|____|')) if item['journal'] is not None else None,
                         'actions': [{
                             'number': key,
                             'date_created': datetime.datetime.strptime(action.split('|sep_for_j|')[0],
@@ -571,34 +584,28 @@ async def api(current_user: User = Depends(get_current_active_user),
                                 'value': sub_action.split('|sep_for_jd|')[3],
                             } for sub_action in action.split('|sep_for_j|')[3].split('|----|')] if
                             action.split('|sep_for_j|')[3] is not None else None
-                        } for key, action in enumerate(item['journal'].split('|____|'))] if item[
-                                                                                                'journal'] is not None else None,
-                        'total_attachments': len(item['attachments'].split('|////|')) if item[
-                                                                                             'attachments'] is not None else None,
+                        } for key, action in enumerate(item['journal'].split('|____|'))] if item['journal'] is not None else None,
+                        'total_attachments': len(item['attachments'].split('|////|')) if item['attachments'] is not None else None,
                         'attachments': [{
                             'id': attachment.split('|')[0],
                             'filename': attachment.split('|')[1],
-                        } for attachment in item['attachments'].split('|////|')] if item[
-                                                                                        'attachments'] is not None else None,
-                        'total_members': len(item['members'].split(',')) if item[
-                                                                                'members'] is not None else None,
+                        } for attachment in item['attachments'].split('|////|')] if item['attachments'] is not None else None,
+                        'total_members': len(item['members'].split(',')) if item['members'] is not None else None,
                         'members': [{
                             'member_id': user.split('/')[0],
                             'user_id': user.split('/')[1],
                             'user_name': user.split('/')[2],
-                        } for user in item['members'].split(',')] if item[
-                                                                         'members'] is not None else None,
-                        'total_relations': len(item['relations'].split('|/|')) if item[
-                                                                                      'relations'] is not None else None,
+                        } for user in item['members'].split(',')] if item['members'] is not None else None,
+                        'total_relations': len(item['relations'].split('|/|')) if item['relations'] is not None else None,
                         'relations': [{
                             'task_id': relation.split('/|/')[0],
                             'task_name': relation.split('/|/')[1],
-                        } for relation in item['relations'].split('|/|')] if item[
-                                                                                 'relations'] is not None else None,
+                        } for relation in item['relations'].split('|/|')] if item['relations'] is not None else None,
+                        'checkList': [{} for subtask_list in item['sl'].split('')]
                     })
                 response.update({
                     'method': 'get_task_data',
-                    'data': {
+                    'data': tasks[0] if request_data.get('issue_id') else {
                         'total_tasks': int(total_tasks),
                         'on_page_count': int(request_data.get('on_page_count')),
                         'current_page_number': int(request_data.get('current_page_number')),
@@ -654,6 +661,11 @@ async def api(current_user: User = Depends(get_current_active_user),
             for member in request_data.get('members'):
                 sql_member += f"""insert into issue_members (watchable_id, user_id, performed)
                                 values ((select id from issues order by id desc limit 1), {member}, null);"""
+            sql_subtasks = ''
+            for tasks in request_data.get('subtasks'):
+                sql_subtasks += f"insert into subtasks_to_task(task_id, name) values ((select id from issues order by id desc limit 1), '{tasks['name']}');"
+                for task in tasks['tasks']:
+                    sql_subtasks += f"insert into subtask(subtask_list_id, is_success, value, name) values ((select id from subtasks_to_task order by id desc limit 1), {task['isChecked']}, '{task['value']}', '{task['name']}');"
             sql_cfs = ''
             for cf in request_data.get('custom_fields'):
                 sql_cfs += f"""insert into custom_values (customized_id, custom_field_id, value)
@@ -676,7 +688,7 @@ async def api(current_user: User = Depends(get_current_active_user),
                 {request_data.get('parent') if request_data.get('parent') else 'null'},
                 {1 if request_data.get('is_private') else 0}, null,
                 {"'" + icon + "'" if icon else 'null'});
-        {sql_attach}{sql_member}{sql_cfs}
+        {sql_attach}{sql_member}{sql_cfs}{sql_subtasks}
         select id from issues order by id desc limit 1""".replace('None', 'null').replace('\'None\'', 'null')
                     cursor.execute(sql)
                 connection.commit()
@@ -764,6 +776,12 @@ async def api(current_user: User = Depends(get_current_active_user),
             for member in request_data.get('members'):
                 sql_members += f"""insert into issue_members (watchable_id, user_id, performed)
                                 values ({request_data.get('task')}, {member}, null) on duplicate key update performed = values(performed);"""
+            sql_subtasks = ''
+            for tasks in request_data.get('subtasks'):
+                sql_subtasks += f"insert into subtasks_to_task(task_id, name) values ((select id from issues order by id desc limit 1), '{tasks['name']}') on duplicate key update name=values(name);"
+                for task in tasks['tasks']:
+                    sql_subtasks += f"insert into subtask(subtask_list_id, is_success, value, name) values ((select id from subtasks_to_task order by id desc limit 1), {task['isChecked']}, '{task['value']}', '{task['name']}') on duplicate key update is_success=values(is_success), value=values(value);"
+
             sql_journal_details += f"""if (select count(*) from issue_members where watchable_id = {request_data.get('task')} and (user_id = {' or user_id = '.join(map(str, request_data.get('members')))} or user_id = {current_user.id})) < 1 then insert into journal_details (journal_id, property, prop_key, old_value, value)
                             values ((select id from journals order by id desc limit 1), 'attr', 'issue_mb', (
                             select group_concat(user_id separator '/') from issue_members where watchable_id = {request_data.get('task')} group by watchable_id), '{'/'.join(map(str, request_data.get('members')))}'); end if;""" if request_data.get(
@@ -803,7 +821,7 @@ async def api(current_user: User = Depends(get_current_active_user),
                                         {f''', is_private = {request_data.get('is_private')}''' if 'is_private' in request_data.keys() else ''}
                                         where id = {request_data.get('task')};{sql_attach}{sql_relations}{sql_relations_to_del}
                                         {sql_journal_details}
-                                        {sql_attach_del}{sql_members_del}{sql_members}{sql_custom_fields}{sql_custom_fields_del if request_data.get('custom_fields') else ''};
+                                        {sql_attach_del}{sql_members_del}{sql_members}{sql_custom_fields}{sql_subtasks}{sql_custom_fields_del if request_data.get('custom_fields') else ''};
                                         if (select count(*) as count from journal_details where journal_id = (select id from journals order by id desc limit 1)) < 1 and
                (select notes from journals where id = (select id from journals order by id desc limit 1)) in ('', null) then
         delete from journals where id = (select id from journals order by id desc limit 1);end if;{sql_journal_relations}{sql_journal_relations_to_del}
@@ -817,7 +835,7 @@ async def api(current_user: User = Depends(get_current_active_user),
                     'task': request_data.get('task')
                 }
             })
-        elif request_data.get('method') == 'get_work':
+        elif request_data.get('method') == 'get_duty':
             with get_connection_pymysql() as connection:
                 with connection.cursor() as cursor:
                     sql = f"""select id from naryad_director where user_id = {current_user.id} and status = 1"""
@@ -1268,4 +1286,135 @@ async def error():
 
 @app.get('/favicon.ico', include_in_schema=False)
 async def favicon():
-    return FileResponse(None)
+    return FileResponse('static/favicon.png')
+
+
+@app.get('/klard')
+@app.post('/klard')
+async def klard(street: str = '',
+                locality: str = '',
+                city: str = '',
+                area: str = '',
+                region: str = ''):
+    all_answers = []
+    with pymysql.connect(host='10.10.20.129',
+                                 user='klard',
+                                 password='klard_password',
+                                 database='klard',
+                                 cursorclass=pymysql.cursors.DictCursor,
+                                 client_flag=CLIENT.MULTI_STATEMENTS) as connection:
+        with connection.cursor() as cursor:
+            sql = f"""
+    select street.name as street, r_main.name as region 
+    from street
+             left join regions_to_all r on street.id = r.street
+             left join region r_main on r.region = r_main.id
+    where street.name rlike '{street}' and r_main.name rlike '{region}'"""
+            cursor.execute(sql)
+            for item in cursor.fetchall():
+                if item['region']:
+                    all_answers.append(item)
+            sql = f"""
+    select street.name as street, a_main.name as area, r_main.name as region
+    from street
+             left join areas_to_all a on street.id = a.street
+             left join area a_main on a.area = a_main.id         
+             left join regions_to_all ra on a.area = ra.area
+             left join region r_main on ra.region = r_main.id
+    where street.name rlike '{street}' and a_main.name rlike '{area}' and r_main.name rlike '{region}'"""
+            cursor.execute(sql)
+            for item in cursor.fetchall():
+                if item['region'] and item['area']:
+                    all_answers.append(item)
+            sql = f"""
+    select street.name as street, c_main.name as city, a_main.name as area, r_main.name as region
+    from street
+             left join city_to_all c on street.id = c.street
+             left join city c_main on c.city = c_main.id
+             left join areas_to_all ca on c.city = ca.city
+             left join area a_main on ca.area = a_main.id
+             left join regions_to_all rca on ca.area = rca.area
+             left join region r_main on rca.region = r_main.id
+    where street.name rlike '{street}' and c_main.name rlike '{city}' and a_main.name rlike '{area}' and r_main.name rlike '{region}'"""
+            cursor.execute(sql)
+            for item in cursor.fetchall():
+                if item['area'] and item['city']:
+                    all_answers.append(item)
+            sql = f"""
+    select street.name as street, c_main.name as city, r_main.name as region
+    from street
+             left join city_to_all c on street.id = c.street
+             left join city c_main on c.city = c_main.id
+             left join regions_to_all rc on c.city = rc.city
+             left join region r_main on rc.region = r_main.id
+    where street.name rlike '{street}' and c_main.name rlike '{city}' and r_main.name rlike '{region}'"""
+            cursor.execute(sql)
+            for item in cursor.fetchall():
+                if item['region'] and item['city']:
+                    all_answers.append(item)
+            sql = f"""
+    select street.name as street, o_main.name as object, c_main.name as city, a_main.name as area, r_main.name as region
+    from street
+             left join objects_to_all o on street.id = o.street
+             left join object o_main on o.object = o_main.id
+             left join city_to_all oc on o.object = oc.object
+             left join city c_main on oc.city = c_main.id
+             left join areas_to_all oca on oc.city = oca.city
+             left join area a_main on oca.area = a_main.id
+             left join regions_to_all roca on oca.area = roca.area
+             left join region r_main on roca.region = r_main.id
+    where street.name rlike '{street}' and o_main.name rlike '{locality}' and c_main.name rlike '{city}' and a_main.name rlike '{area}' and r_main.name rlike '{region}'"""
+            cursor.execute(sql)
+            for item in cursor.fetchall():
+                if item['region'] and item['area'] and item['city'] and item['object']:
+                    all_answers.append(item)
+            sql = f"""
+    select street.name as street, o_main.name as object, a_main.name as area, r_main.name as region
+    from street
+             left join objects_to_all o on street.id = o.street
+             left join object o_main on o.object = o_main.id
+             left join areas_to_all oa on o.object = oa.object
+             left join area a_main on oa.area = a_main.id
+             left join regions_to_all roa on oa.area = roa.area
+             left join region r_main on roa.region = r_main.id
+    where street.name rlike '{street}' and o_main.name rlike '{locality}' and a_main.name rlike '{area}' and r_main.name rlike '{region}'"""
+            cursor.execute(sql)
+            for item in cursor.fetchall():
+                if item['region'] and item['area'] and item['object']:
+                    all_answers.append(item)
+            sql = f"""
+    select street.name as street, o_main.name as object, c_main.name as city, r_main.name as region
+    from street
+             left join objects_to_all o on street.id = o.street
+             left join object o_main on o.object = o_main.id
+             left join city_to_all oc on o.object = oc.object
+             left join city c_main on oc.city = c_main.id
+             left join regions_to_all roc on oc.city = roc.city
+             left join region r_main on roc.region = r_main.id
+    where street.name rlike '{street}' and o_main.name rlike '{locality}' and c_main.name rlike '{city}' and r_main.name rlike '{region}'"""
+            cursor.execute(sql)
+            for item in cursor.fetchall():
+                if item['region'] and item['city'] and item['object']:
+                    all_answers.append(item)
+            sql = f"""
+    select street.name as street, o_main.name as object, r_main.name as region
+    from street
+             left join objects_to_all o on street.id = o.street
+             left join object o_main on o.object = o_main.id
+             left join regions_to_all ro on o.object = ro.object
+             left join region r_main on ro.region = r_main.id
+    where street.name rlike '{street}' and o_main.name rlike '{locality}' and r_main.name rlike '{region}'"""
+            cursor.execute(sql)
+            for item in cursor.fetchall():
+                if item['region'] and item['object']:
+                    all_answers.append(item)
+            temp = []
+            for item in all_answers:
+                if area != '' and 'area' in item.keys():
+                    temp.append(item)
+                elif city != '' and 'city' in item.keys():
+                    temp.append(item)
+                elif area == '' and city == '':
+                    temp.append(item)
+            all_answers = temp
+    return all_answers
